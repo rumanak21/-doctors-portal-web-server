@@ -20,13 +20,51 @@ async function run() {
         await client.connect();
 
         const serviceCollection = client.db("doctors_portal_web").collection("services");
+        const bookingCollection = client.db("doctors_portal_web").collection("bookings");
+
+
+        app.get('/available', async(req, res) =>{
+            const date = req.query.date || 'Dec 4, 2022'
+
+            //Step 1: get all services.
+
+            const services = await serviceCollection.find().toArray();
+            
+
+            //Step 2: get the booking of that day.
+            const query = {date:date}
+            const bookings = await bookingCollection.find(query).toArray();
+            
+            // Step 3: for each service, find bookings for that service
+            services.forEach(service =>{
+                const serviceBookings = bookings.filter(b => b.treatment === service.name);
+                // service.booked = serviceBookings.map(s=> s.slot);
+                const booked = serviceBookings.map(s=> s.slot);
+                
+                const available = service.slot.filter(s=>!booked.includes(s))
+                service.available= available;
+            })
+            res.send(services);
+        })
+
 
         app.get('/service', async (req, res) => {
             const query = {};
             const cursor = serviceCollection.find(query);
-            const services = await cursor.toArray();
-            res.send(services);
+            const service = await cursor.toArray();
+            res.send(service);
         })
+
+        app.post('/booking', async(req, res) => {
+            const booking = req.body;
+            const query = {treatment: booking.treatment, date: booking.date, patient: booking.patient}
+            const exists= await bookingCollection.findOne(query);
+            if(exists){
+                return res.send({success: false, booking: exists});
+            }
+            const result = await bookingCollection.insertOne(booking);
+            return res.send({success:true ,result});
+        } )
 
 
     }
